@@ -3,64 +3,65 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   ValidationPipe,
 } from '@nestjs/common';
-//import { PointHistory, TransactionType, UserPoint } from './point.model';
 import { PointHistory, UserPoint } from './point.model';
-import { UserPointTable } from 'src/database/userpoint.table';
-import { PointHistoryTable } from 'src/database/pointhistory.table';
 import { PointBody as PointDto } from './point.dto';
+import { PointService } from './point.service';
 
+/**
+ * Point Controller
+ * - HTTP 요청 처리
+ * - Service에 비즈니스 로직 위임
+ * - 파라미터 파싱 및 검증
+ */
 @Controller('/point')
 export class PointController {
-  constructor(
-    private readonly userDb: UserPointTable,
-    private readonly historyDb: PointHistoryTable,
-  ) {}
+  constructor(private readonly pointService: PointService) {}
 
   /**
-   * TODO - 특정 유저의 포인트를 조회하는 기능을 작성해주세요.
+   * 특정 유저의 포인트 조회
+   * GET /point/:id
    */
   @Get(':id')
-  async point(@Param('id') id): Promise<UserPoint> {
-    const userId = Number.parseInt(id);
-    return { id: userId, point: 0, updateMillis: Date.now() };
+  async point(@Param('id', ParseIntPipe) id: number): Promise<UserPoint> {
+    return await this.pointService.getPoint(id);
   }
 
   /**
-   * TODO - 특정 유저의 포인트 충전/이용 내역을 조회하는 기능을 작성해주세요.
+   * 특정 유저의 포인트 충전/이용 내역 조회
+   * GET /point/:id/histories
    */
   @Get(':id/histories')
-  async history(@Param('id') id): Promise<PointHistory[]> {
-    const userId = Number.parseInt(id);
-    console.log('userId', userId);
-    return [];
+  async history(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<PointHistory[]> {
+    return await this.pointService.getPointHistories(id);
   }
 
   /**
-   * TODO - 특정 유저의 포인트를 충전하는 기능을 작성해주세요.
+   * 특정 유저의 포인트 충전
+   * PATCH /point/:id/charge
    */
   @Patch(':id/charge')
   async charge(
-    @Param('id') id,
+    @Param('id', ParseIntPipe) id: number,
     @Body(ValidationPipe) pointDto: PointDto,
   ): Promise<UserPoint> {
-    const userId = Number.parseInt(id);
-    const amount = pointDto.amount;
-    return { id: userId, point: amount, updateMillis: Date.now() };
+    return await this.pointService.chargePoint(id, pointDto.amount);
   }
 
   /**
-   * TODO - 특정 유저의 포인트를 사용하는 기능을 작성해주세요.
+   * 특정 유저의 포인트 사용
+   * PATCH /point/:id/use
    */
   @Patch(':id/use')
   async use(
-    @Param('id') id,
+    @Param('id', ParseIntPipe) id: number,
     @Body(ValidationPipe) pointDto: PointDto,
   ): Promise<UserPoint> {
-    const userId = Number.parseInt(id);
-    const amount = pointDto.amount;
-    return { id: userId, point: amount, updateMillis: Date.now() };
+    return await this.pointService.usePoint(id, pointDto.amount);
   }
 }
