@@ -19,33 +19,52 @@ export class LockManager {
    */
   async acquire<T>(userId: number, operation: () => Promise<T>): Promise<T> {
     // 해당 사용자의 이전 Lock을 가져옴 (없으면 즉시 resolve되는 Promise)
-    const previousLock = this.locks.get(userId) || Promise.resolve();
+    const previousLock = this.getPreviousLock(userId);
 
-    // 새로운 Lock을 위한 Promise 생성
-    let releaseLock: () => void;
-    const currentLock = new Promise<void>((resolve) => {
-      releaseLock = resolve;
-    });
-
-    // 새로운 Lock을 Map에 저장 (다음 요청은 이 Lock이 해제될 때까지 대기)
+    // 새로운 Lock 생성 및 등록
+    const { lock: currentLock, release } = this.createLock();
     this.locks.set(userId, currentLock);
 
     try {
       // 이전 작업이 완료될 때까지 대기
       await previousLock;
 
-      // 실제 작업 수행
-      const result = await operation();
-
-      return result;
+      // 실제 작업 수행 및 결과 반환
+      return await operation();
     } finally {
-      // Lock 해제 (다음 작업이 진행될 수 있도록)
-      releaseLock!();
+      // Lock 해제 및 정리
+      release();
+      this.cleanupLockIfNeeded(userId, currentLock);
+    }
+  }
 
-      // 더 이상 대기 중인 작업이 없으면 Map에서 제거 (메모리 최적화)
-      if (this.locks.get(userId) === currentLock) {
-        this.locks.delete(userId);
-      }
+  /**
+   * 이전 Lock을 조회합니다
+   */
+  private getPreviousLock(userId: number): Promise<void> {
+    return this.locks.get(userId) || Promise.resolve();
+  }
+
+  /**
+   * 새로운 Lock을 생성합니다
+   */
+  private createLock(): { lock: Promise<void>; release: () => void } {
+    let release: () => void;
+    const lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { lock, release: release! };
+  }
+
+  /**
+   * 더 이상 대기 중인 작업이 없으면 Lock을 제거합니다
+   */
+  private cleanupLockIfNeeded(
+    userId: number,
+    currentLock: Promise<void>,
+  ): void {
+    if (this.locks.get(userId) === currentLock) {
+      this.locks.delete(userId);
     }
   }
 
