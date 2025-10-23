@@ -9,6 +9,9 @@ import { IPointRepository } from './point.repository.interface';
  */
 @Injectable()
 export class PointService {
+  // 정책 1: 포인트 최대값은 1천만으로 제한
+  // 정책 2: 포인트 충전 1건당 최대 100만원만 가능
+  // 정책 3: 포인트 사용은 100원 단위로 가능
   private readonly MAX_POINT = 10000000; // 최대 포인트 1천만
 
   constructor(
