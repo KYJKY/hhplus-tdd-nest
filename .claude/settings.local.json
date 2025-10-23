@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm test -- point.controller.spec)",
-      "Bash(npm test -- point.service.unit.spec)"
+      "Bash(npm test -- point.service.unit.spec)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []
