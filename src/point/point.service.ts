@@ -9,10 +9,9 @@ import { IPointRepository } from './point.repository.interface';
  */
 @Injectable()
 export class PointService {
-  // 정책 1: 포인트 최대값은 1천만으로 제한
-  // 정책 2: 포인트 충전 1건당 최대 100만원만 가능
-  // 정책 3: 포인트 사용은 100원 단위로 가능
-  private readonly MAX_POINT = 10000000; // 최대 포인트 1천만
+  private readonly MAX_POINT = 10000000; // 최대 포인트: 1천만
+  private readonly MAX_CHARGE_PER_TRANSACTION = 1000000; // 1건당 최대 충전: 100만원
+  private readonly USE_UNIT = 100; // 사용 단위: 100원
 
   constructor(
     @Inject('IPointRepository')
@@ -33,6 +32,7 @@ export class PointService {
   async chargePoint(userId: number, amount: number): Promise<UserPoint> {
     this.validateUserId(userId);
     this.validateAmount(amount);
+    this.validateChargeAmount(amount);
 
     // 현재 포인트 조회
     const currentPoint = await this.pointRepository.getUserPoint(userId);
@@ -64,6 +64,7 @@ export class PointService {
   async usePoint(userId: number, amount: number): Promise<UserPoint> {
     this.validateUserId(userId);
     this.validateAmount(amount);
+    this.validateUseAmount(amount);
 
     // 현재 포인트 조회
     const currentPoint = await this.pointRepository.getUserPoint(userId);
@@ -135,6 +136,30 @@ export class PointService {
   private validateMaxPoint(point: number): void {
     if (point > this.MAX_POINT) {
       throw new BadRequestException('포인트가 최대값을 초과합니다');
+    }
+  }
+
+  /**
+   * 충전 금액 유효성 검증
+   * - 1건당 최대 100만원까지만 충전 가능
+   */
+  private validateChargeAmount(amount: number): void {
+    if (amount > this.MAX_CHARGE_PER_TRANSACTION) {
+      throw new BadRequestException(
+        `1건당 최대 충전 금액은 ${this.MAX_CHARGE_PER_TRANSACTION}원 입니다`,
+      );
+    }
+  }
+
+  /**
+   * 사용 금액 유효성 검증
+   * - 100원 단위로만 사용 가능
+   */
+  private validateUseAmount(amount: number): void {
+    if (amount % this.USE_UNIT !== 0) {
+      throw new BadRequestException(
+        `포인트는 ${this.USE_UNIT}원 단위로만 사용 가능합니다`,
+      );
     }
   }
 }
