@@ -216,6 +216,32 @@ describe('Point Integration Tests', () => {
         const histories = await service.getPointHistories(userId);
         expect(histories).toHaveLength(concurrentRequests);
       });
+
+      it('동시 충전 시 이력이 모두 정확히 기록되어야 한다', async () => {
+        // Given
+        const userId = 105;
+
+        // When: 서로 다른 금액으로 동시 충전
+        await Promise.all([
+          service.chargePoint(userId, 10000),
+          service.chargePoint(userId, 20000),
+        ]);
+
+        // Then: 포인트는 정확히 30000
+        const userPoint = await service.getPoint(userId);
+        expect(userPoint.point).toBe(30000);
+
+        // 이력은 2개 모두 기록되고, 모두 CHARGE 타입
+        const histories = await service.getPointHistories(userId);
+        expect(histories).toHaveLength(2);
+        expect(
+          histories.every((h) => h.type === TransactionType.CHARGE),
+        ).toBe(true);
+
+        // 충전 금액들이 모두 포함되어 있어야 함
+        const amounts = histories.map((h) => h.amount).sort((a, b) => a - b);
+        expect(amounts).toEqual([10000, 20000]);
+      });
     });
 
     describe('동시 사용 요청', () => {
@@ -270,6 +296,36 @@ describe('Point Integration Tests', () => {
         // 최종 잔액은 5000이어야 함 (15000 - 10000)
         const userPoint = await service.getPoint(userId);
         expect(userPoint.point).toBe(5000);
+      });
+
+      it('동시 사용 실패 시 실패한 요청은 이력에 기록되지 않아야 한다', async () => {
+        // Given
+        const userId = 106;
+        await service.chargePoint(userId, 10000);
+
+        // When: 동시에 사용 (하나는 성공, 하나는 실패 예상)
+        const results = await Promise.allSettled([
+          service.usePoint(userId, 8000),
+          service.usePoint(userId, 8000), // 잔액 부족으로 실패해야 함
+        ]);
+
+        // Then: 하나는 성공, 하나는 실패
+        const rejected = results.filter((r) => r.status === 'rejected');
+        expect(rejected.length).toBe(1);
+
+        // 이력은 성공한 요청만 기록 (초기 충전 1개 + 성공한 사용 1개)
+        const histories = await service.getPointHistories(userId);
+        expect(histories).toHaveLength(2);
+
+        const useHistories = histories.filter(
+          (h) => h.type === TransactionType.USE,
+        );
+        expect(useHistories).toHaveLength(1);
+        expect(useHistories[0].amount).toBe(8000);
+
+        // 최종 잔액 확인
+        const userPoint = await service.getPoint(userId);
+        expect(userPoint.point).toBe(2000); // 10000 - 8000
       });
     });
 

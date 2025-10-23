@@ -488,65 +488,27 @@ describe('PointService - Unit Tests', () => {
       expect(result.point).toBe(9800);
     });
 
-    it('100원 단위가 아닌 금액은 사용할 수 없다 - 50원', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 50;
+    it.each([
+      [50, '50원'],
+      [99, '99원'],
+      [150, '150원'],
+      [1001, '1,001원'],
+    ])(
+      '100원 단위가 아닌 금액은 사용할 수 없다 - %s',
+      async (invalidAmount, description) => {
+        // Given
+        const userId = 1;
 
-      // When & Then
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        '포인트는 100원 단위로만 사용 가능합니다',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('100원 단위가 아닌 금액은 사용할 수 없다 - 99원', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 99;
-
-      // When & Then
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        '포인트는 100원 단위로만 사용 가능합니다',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('100원 단위가 아닌 금액은 사용할 수 없다 - 150원', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 150;
-
-      // When & Then
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        '포인트는 100원 단위로만 사용 가능합니다',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('100원 단위가 아닌 금액은 사용할 수 없다 - 1,001원', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 1001;
-
-      // When & Then
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        '포인트는 100원 단위로만 사용 가능합니다',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
+        // When & Then
+        await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+          BadRequestException,
+        );
+        await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+          '포인트는 100원 단위로만 사용 가능합니다',
+        );
+        expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('getPointHistories - 포인트 이력 조회', () => {
@@ -580,7 +542,6 @@ describe('PointService - Unit Tests', () => {
       expect(mockRepository.getPointHistories).toHaveBeenCalledWith(userId);
       expect(mockRepository.getPointHistories).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockHistories);
-      expect(result.length).toBe(2);
     });
 
     it('이력이 없으면 빈 배열을 반환한다', async () => {
@@ -593,7 +554,6 @@ describe('PointService - Unit Tests', () => {
 
       // Then
       expect(result).toEqual([]);
-      expect(result.length).toBe(0);
     });
   });
 });

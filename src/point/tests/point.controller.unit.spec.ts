@@ -94,7 +94,6 @@ describe('PointController - Unit Tests', () => {
       expect(mockService.getPointHistories).toHaveBeenCalledWith(userId);
       expect(mockService.getPointHistories).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockHistories);
-      expect(result.length).toBe(2);
     });
 
     it('이력이 없으면 빈 배열을 반환한다', async () => {
@@ -107,7 +106,6 @@ describe('PointController - Unit Tests', () => {
 
       // Then
       expect(result).toEqual([]);
-      expect(result.length).toBe(0);
     });
   });
 
@@ -188,44 +186,4 @@ describe('PointController - Unit Tests', () => {
     });
   });
 
-  describe('Controller 책임 검증', () => {
-    it('Controller는 비즈니스 로직을 Service에 위임한다', async () => {
-      // Given
-      const userId = 1;
-      const amount = 1000;
-      const pointDto: PointBody = { amount };
-
-      mockService.getPoint.mockResolvedValue({
-        id: userId,
-        point: 5000,
-        updateMillis: Date.now(),
-      });
-
-      mockService.chargePoint.mockResolvedValue({
-        id: userId,
-        point: 6000,
-        updateMillis: Date.now(),
-      });
-
-      mockService.usePoint.mockResolvedValue({
-        id: userId,
-        point: 5000,
-        updateMillis: Date.now(),
-      });
-
-      mockService.getPointHistories.mockResolvedValue([]);
-
-      // When
-      await controller.point(userId);
-      await controller.charge(userId, pointDto);
-      await controller.use(userId, pointDto);
-      await controller.history(userId);
-
-      // Then - Controller는 단순히 Service를 호출만 함
-      expect(mockService.getPoint).toHaveBeenCalled();
-      expect(mockService.chargePoint).toHaveBeenCalled();
-      expect(mockService.usePoint).toHaveBeenCalled();
-      expect(mockService.getPointHistories).toHaveBeenCalled();
-    });
-  });
 });
