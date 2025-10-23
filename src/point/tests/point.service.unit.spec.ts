@@ -250,6 +250,97 @@ describe('PointService - Unit Tests', () => {
         123456789,
       );
     });
+
+    it('1건당 최대 100만원까지 충전 가능하다', async () => {
+      // Given
+      const userId = 1;
+      const maxChargeAmount = 1000000; // 100만원
+
+      mockRepository.getUserPoint.mockResolvedValue({
+        id: userId,
+        point: 0,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.updateUserPoint.mockResolvedValue({
+        id: userId,
+        point: maxChargeAmount,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.addPointHistory.mockResolvedValue({
+        id: 1,
+        userId,
+        amount: maxChargeAmount,
+        type: TransactionType.CHARGE,
+        timeMillis: Date.now(),
+      });
+
+      // When
+      const result = await service.chargePoint(userId, maxChargeAmount);
+
+      // Then
+      expect(result.point).toBe(maxChargeAmount);
+    });
+
+    it('100만원을 초과하는 금액은 1건당 충전할 수 없다', async () => {
+      // Given
+      const userId = 1;
+      const overMaxAmount = 1000001; // 100만원 + 1원
+
+      // When & Then
+      await expect(service.chargePoint(userId, overMaxAmount)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.chargePoint(userId, overMaxAmount)).rejects.toThrow(
+        '1건당 최대 충전 금액은 1000000원 입니다',
+      );
+      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
+    });
+
+    it('경계값: 999,999원 충전은 성공한다', async () => {
+      // Given
+      const userId = 1;
+      const boundaryAmount = 999999;
+
+      mockRepository.getUserPoint.mockResolvedValue({
+        id: userId,
+        point: 0,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.updateUserPoint.mockResolvedValue({
+        id: userId,
+        point: boundaryAmount,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.addPointHistory.mockResolvedValue({
+        id: 1,
+        userId,
+        amount: boundaryAmount,
+        type: TransactionType.CHARGE,
+        timeMillis: Date.now(),
+      });
+
+      // When
+      const result = await service.chargePoint(userId, boundaryAmount);
+
+      // Then
+      expect(result.point).toBe(boundaryAmount);
+    });
+
+    it('경계값: 1,000,001원 충전은 실패한다', async () => {
+      // Given
+      const userId = 1;
+      const overBoundaryAmount = 1000001;
+
+      // When & Then
+      await expect(
+        service.chargePoint(userId, overBoundaryAmount),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
+    });
   });
 
   describe('usePoint - 포인트 사용', () => {
@@ -420,6 +511,130 @@ describe('PointService - Unit Tests', () => {
         TransactionType.USE,
         987654321,
       );
+    });
+
+    it('100원 단위로 사용 가능하다', async () => {
+      // Given
+      const userId = 1;
+      const useAmount = 100;
+
+      mockRepository.getUserPoint.mockResolvedValue({
+        id: userId,
+        point: 10000,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.updateUserPoint.mockResolvedValue({
+        id: userId,
+        point: 9900,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.addPointHistory.mockResolvedValue({
+        id: 1,
+        userId,
+        amount: useAmount,
+        type: TransactionType.USE,
+        timeMillis: Date.now(),
+      });
+
+      // When
+      const result = await service.usePoint(userId, useAmount);
+
+      // Then
+      expect(result.point).toBe(9900);
+    });
+
+    it('200원 단위로 사용 가능하다', async () => {
+      // Given
+      const userId = 1;
+      const useAmount = 200;
+
+      mockRepository.getUserPoint.mockResolvedValue({
+        id: userId,
+        point: 10000,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.updateUserPoint.mockResolvedValue({
+        id: userId,
+        point: 9800,
+        updateMillis: Date.now(),
+      });
+
+      mockRepository.addPointHistory.mockResolvedValue({
+        id: 1,
+        userId,
+        amount: useAmount,
+        type: TransactionType.USE,
+        timeMillis: Date.now(),
+      });
+
+      // When
+      const result = await service.usePoint(userId, useAmount);
+
+      // Then
+      expect(result.point).toBe(9800);
+    });
+
+    it('100원 단위가 아닌 금액은 사용할 수 없다 - 50원', async () => {
+      // Given
+      const userId = 1;
+      const invalidAmount = 50;
+
+      // When & Then
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        '포인트는 100원 단위로만 사용 가능합니다',
+      );
+      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
+    });
+
+    it('100원 단위가 아닌 금액은 사용할 수 없다 - 99원', async () => {
+      // Given
+      const userId = 1;
+      const invalidAmount = 99;
+
+      // When & Then
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        '포인트는 100원 단위로만 사용 가능합니다',
+      );
+      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
+    });
+
+    it('100원 단위가 아닌 금액은 사용할 수 없다 - 150원', async () => {
+      // Given
+      const userId = 1;
+      const invalidAmount = 150;
+
+      // When & Then
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        '포인트는 100원 단위로만 사용 가능합니다',
+      );
+      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
+    });
+
+    it('100원 단위가 아닌 금액은 사용할 수 없다 - 1,001원', async () => {
+      // Given
+      const userId = 1;
+      const invalidAmount = 1001;
+
+      // When & Then
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
+        '포인트는 100원 단위로만 사용 가능합니다',
+      );
+      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
     });
   });
 
