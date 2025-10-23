@@ -2,18 +2,21 @@ import { Injectable, Inject } from '@nestjs/common';
 import { UserPoint, PointHistory, TransactionType } from './point.model';
 import { IPointRepository } from './point.repository.interface';
 import { PointValidator } from './point.validator';
+import { LockManager } from './lock-manager';
 
 /**
  * Point Service
  * - 포인트 관련 비즈니스 로직 담당
  * - Repository 인터페이스에 의존 (테스트 시 Mock 가능)
  * - 검증 로직은 PointValidator로 위임
+ * - LockManager로 동시성 제어
  */
 @Injectable()
 export class PointService {
   constructor(
     @Inject('IPointRepository')
     private readonly pointRepository: IPointRepository,
+    private readonly lockManager: LockManager,
   ) {}
 
   /**
@@ -30,23 +33,26 @@ export class PointService {
    * @param amount - 충전 금액 (DTO의 @IsInt, @Min으로 이미 검증됨)
    */
   async chargePoint(userId: number, amount: number): Promise<UserPoint> {
-    // 비즈니스 규칙 검증
-    PointValidator.validateChargeAmount(amount);
+    // Lock을 획득하고 작업을 순차적으로 처리
+    return this.lockManager.acquire(userId, async () => {
+      // 비즈니스 규칙 검증
+      PointValidator.validateChargeAmount(amount);
 
-    // 현재 포인트 조회
-    const currentPoint = await this.pointRepository.getUserPoint(userId);
+      // 현재 포인트 조회
+      const currentPoint = await this.pointRepository.getUserPoint(userId);
 
-    // 충전 후 포인트 계산 및 검증
-    const newPoint = currentPoint.point + amount;
-    PointValidator.validateMaxPoint(newPoint);
+      // 충전 후 포인트 계산 및 검증
+      const newPoint = currentPoint.point + amount;
+      PointValidator.validateMaxPoint(newPoint);
 
-    // 포인트 업데이트 및 이력 기록
-    return await this.updatePointWithHistory(
-      userId,
-      newPoint,
-      amount,
-      TransactionType.CHARGE,
-    );
+      // 포인트 업데이트 및 이력 기록
+      return await this.updatePointWithHistory(
+        userId,
+        newPoint,
+        amount,
+        TransactionType.CHARGE,
+      );
+    });
   }
 
   /**
@@ -55,25 +61,28 @@ export class PointService {
    * @param amount - 사용 금액 (DTO의 @IsInt, @Min으로 이미 검증됨)
    */
   async usePoint(userId: number, amount: number): Promise<UserPoint> {
-    // 비즈니스 규칙 검증
-    PointValidator.validateUseAmount(amount);
+    // Lock을 획득하고 작업을 순차적으로 처리
+    return this.lockManager.acquire(userId, async () => {
+      // 비즈니스 규칙 검증
+      PointValidator.validateUseAmount(amount);
 
-    // 현재 포인트 조회
-    const currentPoint = await this.pointRepository.getUserPoint(userId);
+      // 현재 포인트 조회
+      const currentPoint = await this.pointRepository.getUserPoint(userId);
 
-    // 잔액 확인
-    PointValidator.validateSufficientBalance(currentPoint.point, amount);
+      // 잔액 확인
+      PointValidator.validateSufficientBalance(currentPoint.point, amount);
 
-    // 사용 후 포인트 계산
-    const newPoint = currentPoint.point - amount;
+      // 사용 후 포인트 계산
+      const newPoint = currentPoint.point - amount;
 
-    // 포인트 업데이트 및 이력 기록
-    return await this.updatePointWithHistory(
-      userId,
-      newPoint,
-      amount,
-      TransactionType.USE,
-    );
+      // 포인트 업데이트 및 이력 기록
+      return await this.updatePointWithHistory(
+        userId,
+        newPoint,
+        amount,
+        TransactionType.USE,
+      );
+    });
   }
 
   /**

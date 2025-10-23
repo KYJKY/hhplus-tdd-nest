@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PointService } from '../point.service';
 import { PointRepository } from '../point.repository';
+import { LockManager } from '../lock-manager';
 import { UserPointTable } from '../../database/userpoint.table';
 import { PointHistoryTable } from '../../database/pointhistory.table';
 import { TransactionType } from '../point.model';
@@ -23,6 +24,7 @@ describe('Point Integration Tests', () => {
       providers: [
         PointService,
         PointRepository,
+        LockManager,
         UserPointTable,
         PointHistoryTable,
         {

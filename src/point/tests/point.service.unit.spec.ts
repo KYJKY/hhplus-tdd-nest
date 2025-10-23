@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PointService } from '../point.service';
 import { IPointRepository } from '../point.repository.interface';
 import { UserPoint, PointHistory, TransactionType } from '../point.model';
+import { LockManager } from '../lock-manager';
 
 describe('PointService - Unit Tests', () => {
   let service: PointService;
@@ -20,6 +21,7 @@ describe('PointService - Unit Tests', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PointService,
+        LockManager,
         {
           provide: 'IPointRepository',
           useValue: mockRepository,
