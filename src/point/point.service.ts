@@ -1,18 +1,16 @@
-import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { UserPoint, PointHistory, TransactionType } from './point.model';
 import { IPointRepository } from './point.repository.interface';
+import { PointValidator } from './point.validator';
 
 /**
  * Point Service
  * - 포인트 관련 비즈니스 로직 담당
  * - Repository 인터페이스에 의존 (테스트 시 Mock 가능)
+ * - 검증 로직은 PointValidator로 위임
  */
 @Injectable()
 export class PointService {
-  private readonly MAX_POINT = 10000000; // 최대 포인트: 1천만
-  private readonly MAX_CHARGE_PER_TRANSACTION = 1000000; // 1건당 최대 충전: 100만원
-  private readonly USE_UNIT = 100; // 사용 단위: 100원
-
   constructor(
     @Inject('IPointRepository')
     private readonly pointRepository: IPointRepository,
@@ -33,30 +31,22 @@ export class PointService {
    */
   async chargePoint(userId: number, amount: number): Promise<UserPoint> {
     // 비즈니스 규칙 검증
-    this.validateChargeAmount(amount);
+    PointValidator.validateChargeAmount(amount);
 
     // 현재 포인트 조회
     const currentPoint = await this.pointRepository.getUserPoint(userId);
 
     // 충전 후 포인트 계산 및 검증
     const newPoint = currentPoint.point + amount;
-    this.validateMaxPoint(newPoint);
+    PointValidator.validateMaxPoint(newPoint);
 
-    // 포인트 업데이트
-    const updatedPoint = await this.pointRepository.updateUserPoint(
+    // 포인트 업데이트 및 이력 기록
+    return await this.updatePointWithHistory(
       userId,
       newPoint,
-    );
-
-    // 이력 기록
-    await this.pointRepository.addPointHistory(
-      userId,
       amount,
       TransactionType.CHARGE,
-      updatedPoint.updateMillis,
     );
-
-    return updatedPoint;
   }
 
   /**
@@ -66,34 +56,24 @@ export class PointService {
    */
   async usePoint(userId: number, amount: number): Promise<UserPoint> {
     // 비즈니스 규칙 검증
-    this.validateUseAmount(amount);
+    PointValidator.validateUseAmount(amount);
 
     // 현재 포인트 조회
     const currentPoint = await this.pointRepository.getUserPoint(userId);
 
     // 잔액 확인
-    if (currentPoint.point < amount) {
-      throw new BadRequestException('포인트가 부족합니다');
-    }
+    PointValidator.validateSufficientBalance(currentPoint.point, amount);
 
     // 사용 후 포인트 계산
     const newPoint = currentPoint.point - amount;
 
-    // 포인트 업데이트
-    const updatedPoint = await this.pointRepository.updateUserPoint(
+    // 포인트 업데이트 및 이력 기록
+    return await this.updatePointWithHistory(
       userId,
       newPoint,
-    );
-
-    // 이력 기록
-    await this.pointRepository.addPointHistory(
-      userId,
       amount,
       TransactionType.USE,
-      updatedPoint.updateMillis,
     );
-
-    return updatedPoint;
   }
 
   /**
@@ -105,36 +85,33 @@ export class PointService {
   }
 
   /**
-   * 최대 포인트 초과 검증
-   * - 충전 후 총 포인트가 한도를 넘는지 검증 (비즈니스 규칙)
+   * 포인트 업데이트 및 이력 기록 (공통 로직 추출)
+   * - DRY 원칙 적용: chargePoint와 usePoint의 중복 제거
+   * @param userId - 사용자 ID
+   * @param newPoint - 업데이트할 포인트 값
+   * @param amount - 거래 금액
+   * @param type - 거래 유형 (CHARGE 또는 USE)
    */
-  private validateMaxPoint(point: number): void {
-    if (point > this.MAX_POINT) {
-      throw new BadRequestException('포인트가 최대값을 초과합니다');
-    }
-  }
+  private async updatePointWithHistory(
+    userId: number,
+    newPoint: number,
+    amount: number,
+    type: TransactionType,
+  ): Promise<UserPoint> {
+    // 포인트 업데이트
+    const updatedPoint = await this.pointRepository.updateUserPoint(
+      userId,
+      newPoint,
+    );
 
-  /**
-   * 충전 금액 유효성 검증
-   * - 1건당 최대 100만원까지만 충전 가능
-   */
-  private validateChargeAmount(amount: number): void {
-    if (amount > this.MAX_CHARGE_PER_TRANSACTION) {
-      throw new BadRequestException(
-        `1건당 최대 충전 금액은 ${this.MAX_CHARGE_PER_TRANSACTION}원 입니다`,
-      );
-    }
-  }
+    // 이력 기록
+    await this.pointRepository.addPointHistory(
+      userId,
+      amount,
+      type,
+      updatedPoint.updateMillis,
+    );
 
-  /**
-   * 사용 금액 유효성 검증
-   * - 100원 단위로만 사용 가능
-   */
-  private validateUseAmount(amount: number): void {
-    if (amount % this.USE_UNIT !== 0) {
-      throw new BadRequestException(
-        `포인트는 ${this.USE_UNIT}원 단위로만 사용 가능합니다`,
-      );
-    }
+    return updatedPoint;
   }
 }
