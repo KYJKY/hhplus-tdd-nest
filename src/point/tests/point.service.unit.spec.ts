@@ -35,6 +35,9 @@ describe('PointService - Unit Tests', () => {
   });
 
   describe('getPoint - 포인트 조회', () => {
+    // NOTE: userId 검증은 Controller의 ParseIntPipe에서 수행됨
+    // - 음수, 0, 정수가 아닌 값 → Controller 계층에서 400 에러 반환
+
     it('유효한 userId로 조회하면 Repository에서 포인트를 가져온다', async () => {
       // Given
       const userId = 1;
@@ -53,45 +56,14 @@ describe('PointService - Unit Tests', () => {
       expect(mockRepository.getUserPoint).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockUserPoint);
     });
-
-    it('음수 userId는 에러를 던진다', async () => {
-      // Given
-      const invalidUserId = -1;
-
-      // When & Then
-      await expect(service.getPoint(invalidUserId)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.getPoint(invalidUserId)).rejects.toThrow(
-        '올바르지 않은 ID 값 입니다.',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('0인 userId는 에러를 던진다', async () => {
-      // Given
-      const invalidUserId = 0;
-
-      // When & Then
-      await expect(service.getPoint(invalidUserId)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('정수가 아닌 userId는 에러를 던진다', async () => {
-      // Given
-      const invalidUserId = 1.5;
-
-      // When & Then
-      await expect(service.getPoint(invalidUserId)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
   });
 
   describe('chargePoint - 포인트 충전', () => {
+    // NOTE: amount 기본 검증은 DTO(ChargePointDto)에서 수행됨
+    // - @IsInt(): 정수 검증
+    // - @Min(1): 양수 검증
+    // Service에서는 비즈니스 규칙만 검증 (충전 한도, 총 포인트 한도)
+
     it('유효한 금액으로 충전하면 포인트가 증가한다', async () => {
       // Given
       const userId = 1;
@@ -136,60 +108,6 @@ describe('PointService - Unit Tests', () => {
         expect.any(Number),
       );
       expect(result.point).toBe(expectedNewPoint);
-    });
-
-    it('음수 금액으로 충전하면 에러를 던진다', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = -500;
-
-      // When & Then
-      await expect(service.chargePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.chargePoint(userId, invalidAmount)).rejects.toThrow(
-        '포인트는 0보다 커야 합니다',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('0원으로 충전하면 에러를 던진다', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 0;
-
-      // When & Then
-      await expect(service.chargePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('정수가 아닌 금액으로 충전하면 에러를 던진다', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 100.5;
-
-      // When & Then
-      await expect(service.chargePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.chargePoint(userId, invalidAmount)).rejects.toThrow(
-        '포인트는 정수만 가능합니다',
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
-    });
-
-    it('최대값을 초과하는 금액으로 충전하면 에러를 던진다', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = 10000001;
-
-      // When & Then
-      await expect(service.chargePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
     });
 
     it('충전 후 포인트가 최대값을 초과하면 에러를 던진다', async () => {
@@ -344,6 +262,11 @@ describe('PointService - Unit Tests', () => {
   });
 
   describe('usePoint - 포인트 사용', () => {
+    // NOTE: amount 기본 검증은 DTO(UsePointDto)에서 수행됨
+    // - @IsInt(): 정수 검증
+    // - @Min(1): 양수 검증
+    // Service에서는 비즈니스 규칙만 검증 (사용 단위, 잔액 확인)
+
     it('잔액이 충분하면 포인트가 차감된다', async () => {
       // Given
       const userId = 1;
@@ -462,18 +385,6 @@ describe('PointService - Unit Tests', () => {
 
       // Then
       expect(result.point).toBe(0);
-    });
-
-    it('음수 금액으로 사용하면 에러를 던진다', async () => {
-      // Given
-      const userId = 1;
-      const invalidAmount = -500;
-
-      // When & Then
-      await expect(service.usePoint(userId, invalidAmount)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(mockRepository.getUserPoint).not.toHaveBeenCalled();
     });
 
     it('사용 성공 시 이력이 기록된다', async () => {
@@ -639,6 +550,8 @@ describe('PointService - Unit Tests', () => {
   });
 
   describe('getPointHistories - 포인트 이력 조회', () => {
+    // NOTE: userId 검증은 Controller의 ParseIntPipe에서 수행됨
+
     it('유효한 userId로 조회하면 Repository에서 이력을 가져온다', async () => {
       // Given
       const userId = 1;
@@ -681,17 +594,6 @@ describe('PointService - Unit Tests', () => {
       // Then
       expect(result).toEqual([]);
       expect(result.length).toBe(0);
-    });
-
-    it('잘못된 userId는 에러를 던진다', async () => {
-      // Given
-      const invalidUserId = -1;
-
-      // When & Then
-      await expect(service.getPointHistories(invalidUserId)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(mockRepository.getPointHistories).not.toHaveBeenCalled();
     });
   });
 });

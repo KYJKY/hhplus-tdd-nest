@@ -20,18 +20,19 @@ export class PointService {
 
   /**
    * 특정 유저의 포인트 조회
+   * @param userId - 사용자 ID (Controller의 ParseIntPipe로 이미 검증됨)
    */
   async getPoint(userId: number): Promise<UserPoint> {
-    this.validateUserId(userId);
     return await this.pointRepository.getUserPoint(userId);
   }
 
   /**
    * 특정 유저의 포인트 충전
+   * @param userId - 사용자 ID (Controller의 ParseIntPipe로 이미 검증됨)
+   * @param amount - 충전 금액 (DTO의 @IsInt, @Min으로 이미 검증됨)
    */
   async chargePoint(userId: number, amount: number): Promise<UserPoint> {
-    this.validateUserId(userId);
-    this.validateAmount(amount);
+    // 비즈니스 규칙 검증
     this.validateChargeAmount(amount);
 
     // 현재 포인트 조회
@@ -60,10 +61,11 @@ export class PointService {
 
   /**
    * 특정 유저의 포인트 사용
+   * @param userId - 사용자 ID (Controller의 ParseIntPipe로 이미 검증됨)
+   * @param amount - 사용 금액 (DTO의 @IsInt, @Min으로 이미 검증됨)
    */
   async usePoint(userId: number, amount: number): Promise<UserPoint> {
-    this.validateUserId(userId);
-    this.validateAmount(amount);
+    // 비즈니스 규칙 검증
     this.validateUseAmount(amount);
 
     // 현재 포인트 조회
@@ -96,42 +98,15 @@ export class PointService {
 
   /**
    * 특정 유저의 포인트 이용 내역 조회
+   * @param userId - 사용자 ID (Controller의 ParseIntPipe로 이미 검증됨)
    */
   async getPointHistories(userId: number): Promise<PointHistory[]> {
-    this.validateUserId(userId);
     return await this.pointRepository.getPointHistories(userId);
   }
 
   /**
-   * 유저 ID 유효성 검증
-   */
-  private validateUserId(userId: number): void {
-    if (!Number.isInteger(userId) || userId <= 0) {
-      throw new BadRequestException('올바르지 않은 ID 값 입니다.');
-    }
-  }
-
-  /**
-   * 금액 유효성 검증
-   */
-  private validateAmount(amount: number): void {
-    if (!Number.isInteger(amount)) {
-      throw new BadRequestException('포인트는 정수만 가능합니다');
-    }
-
-    if (amount <= 0) {
-      throw new BadRequestException('포인트는 0보다 커야 합니다');
-    }
-
-    if (amount > this.MAX_POINT) {
-      throw new BadRequestException(
-        `포인트는 ${this.MAX_POINT}을 초과할 수 없습니다`,
-      );
-    }
-  }
-
-  /**
    * 최대 포인트 초과 검증
+   * - 충전 후 총 포인트가 한도를 넘는지 검증 (비즈니스 규칙)
    */
   private validateMaxPoint(point: number): void {
     if (point > this.MAX_POINT) {
