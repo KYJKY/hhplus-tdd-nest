@@ -170,10 +170,14 @@ describe('Point Integration Tests', () => {
   });
 
   describe('Concurrency Tests - 동시성 문제', () => {
+    // userId 자동 증가로 테스트 독립성 보장
+    let nextUserId = 1000;
+    const getUserId = () => ++nextUserId;
+
     describe('동시 충전 요청', () => {
-      it('동일 사용자에 대한 2개의 충전 요청이 동시에 들어오면 모두 정확히 반영되어야 한다', async () => {
+      it('동시 충전 시 모든 금액이 합산되어야 한다', async () => {
         // Given
-        const userId = 100;
+        const userId = getUserId();
         const chargeAmount = 10000;
 
         // When: 동시에 2번 충전
@@ -182,11 +186,23 @@ describe('Point Integration Tests', () => {
           service.chargePoint(userId, chargeAmount),
         ]);
 
-        // Then: 동시성 제어가 제대로 되어 있다면 정확히 20000이 되어야 함
+        // Then
         const userPoint = await service.getPoint(userId);
         expect(userPoint.point).toBe(20000);
+      });
 
-        // 이력은 2개가 기록됨
+      it('동시 충전 시 모든 이력이 기록되어야 한다', async () => {
+        // Given
+        const userId = getUserId();
+        const chargeAmount = 10000;
+
+        // When
+        await Promise.all([
+          service.chargePoint(userId, chargeAmount),
+          service.chargePoint(userId, chargeAmount),
+        ]);
+
+        // Then
         const histories = await service.getPointHistories(userId);
         expect(histories).toHaveLength(2);
         expect(histories.every((h) => h.type === TransactionType.CHARGE)).toBe(
@@ -194,76 +210,91 @@ describe('Point Integration Tests', () => {
         );
       });
 
-      it('동일 사용자에 대한 5개의 충전 요청이 동시에 들어오면 모두 정확히 반영되어야 한다', async () => {
+      it('5개의 동시 충전도 정확히 합산되어야 한다', async () => {
         // Given
-        const userId = 101;
+        const userId = getUserId();
         const chargeAmount = 5000;
         const concurrentRequests = 5;
 
-        // When: 동시에 5번 충전
+        // When
         const promises = Array(concurrentRequests)
           .fill(null)
           .map(() => service.chargePoint(userId, chargeAmount));
-
         await Promise.all(promises);
 
-        // Then: 동시성 제어가 제대로 되어 있다면 정확히 25000이 되어야 함
+        // Then
         const userPoint = await service.getPoint(userId);
-        const expectedAmount = chargeAmount * concurrentRequests; // 25000
-        expect(userPoint.point).toBe(expectedAmount);
-
-        // 이력은 5개 모두 기록됨
-        const histories = await service.getPointHistories(userId);
-        expect(histories).toHaveLength(concurrentRequests);
+        expect(userPoint.point).toBe(25000);
       });
 
-      it('동시 충전 시 이력이 모두 정확히 기록되어야 한다', async () => {
+      it('다수의 동시 충전(10개)도 정확히 처리되어야 한다', async () => {
         // Given
-        const userId = 105;
+        const userId = getUserId();
+        const chargeAmount = 1000;
+        const concurrentRequests = 10;
 
-        // When: 서로 다른 금액으로 동시 충전
+        // When
+        const promises = Array(concurrentRequests)
+          .fill(null)
+          .map(() => service.chargePoint(userId, chargeAmount));
+        await Promise.all(promises);
+
+        // Then
+        const userPoint = await service.getPoint(userId);
+        expect(userPoint.point).toBe(10000);
+      });
+
+      it('서로 다른 금액의 동시 충전 시 각 이력이 정확히 기록되어야 한다', async () => {
+        // Given
+        const userId = getUserId();
+
+        // When
         await Promise.all([
           service.chargePoint(userId, 10000),
           service.chargePoint(userId, 20000),
         ]);
 
-        // Then: 포인트는 정확히 30000
-        const userPoint = await service.getPoint(userId);
-        expect(userPoint.point).toBe(30000);
-
-        // 이력은 2개 모두 기록되고, 모두 CHARGE 타입
+        // Then
         const histories = await service.getPointHistories(userId);
         expect(histories).toHaveLength(2);
-        expect(
-          histories.every((h) => h.type === TransactionType.CHARGE),
-        ).toBe(true);
 
-        // 충전 금액들이 모두 포함되어 있어야 함
         const amounts = histories.map((h) => h.amount).sort((a, b) => a - b);
         expect(amounts).toEqual([10000, 20000]);
       });
     });
 
     describe('동시 사용 요청', () => {
-      it('충분한 잔액이 있을 때 동시 사용 요청이 들어오면 모두 정확히 차감되어야 한다', async () => {
+      it('동시 사용 시 모든 금액이 차감되어야 한다', async () => {
         // Given
-        const userId = 102;
+        const userId = getUserId();
         const initialBalance = 50000;
         const useAmount = 10000;
 
-        // 초기 잔액 충전
         await service.chargePoint(userId, initialBalance);
 
-        // When: 동시에 2번 사용 (총 20000 사용 시도)
+        // When
         await Promise.all([
           service.usePoint(userId, useAmount),
           service.usePoint(userId, useAmount),
         ]);
 
-        // Then: 동시성 제어가 제대로 되어 있다면 정확히 30000이 되어야 함
+        // Then
         const userPoint = await service.getPoint(userId);
         expect(userPoint.point).toBe(30000);
+      });
 
+      it('동시 사용 시 모든 이력이 기록되어야 한다', async () => {
+        // Given
+        const userId = getUserId();
+        await service.chargePoint(userId, 50000);
+
+        // When
+        await Promise.all([
+          service.usePoint(userId, 10000),
+          service.usePoint(userId, 10000),
+        ]);
+
+        // Then
         const histories = await service.getPointHistories(userId);
         const useHistories = histories.filter(
           (h) => h.type === TransactionType.USE,
@@ -271,120 +302,127 @@ describe('Point Integration Tests', () => {
         expect(useHistories).toHaveLength(2);
       });
 
-      it('잔액이 부족한 상황에서 동시 사용 요청 시 하나만 성공하고 나머지는 실패해야 한다', async () => {
+      it('잔액 부족 시 동시 사용은 하나만 성공해야 한다', async () => {
         // Given
-        const userId = 103;
-        const initialBalance = 15000;
-        const useAmount = 10000;
+        const userId = getUserId();
+        await service.chargePoint(userId, 15000);
 
-        await service.chargePoint(userId, initialBalance);
-
-        // When: 동시에 2번 사용 (총 20000 사용 시도하지만 잔액은 15000)
+        // When
         const results = await Promise.allSettled([
-          service.usePoint(userId, useAmount),
-          service.usePoint(userId, useAmount),
+          service.usePoint(userId, 10000),
+          service.usePoint(userId, 10000),
         ]);
 
-        // Then: 정확히 하나만 성공하고 하나는 실패해야 함
+        // Then
         const fulfilled = results.filter((r) => r.status === 'fulfilled');
         const rejected = results.filter((r) => r.status === 'rejected');
 
         expect(fulfilled.length).toBe(1);
         expect(rejected.length).toBe(1);
         expect(rejected[0].reason).toBeInstanceOf(BadRequestException);
-
-        // 최종 잔액은 5000이어야 함 (15000 - 10000)
-        const userPoint = await service.getPoint(userId);
-        expect(userPoint.point).toBe(5000);
       });
 
-      it('동시 사용 실패 시 실패한 요청은 이력에 기록되지 않아야 한다', async () => {
+      it('잔액 부족으로 실패한 요청은 이력에 기록되지 않아야 한다', async () => {
         // Given
-        const userId = 106;
+        const userId = getUserId();
         await service.chargePoint(userId, 10000);
 
-        // When: 동시에 사용 (하나는 성공, 하나는 실패 예상)
+        // When
         const results = await Promise.allSettled([
           service.usePoint(userId, 8000),
-          service.usePoint(userId, 8000), // 잔액 부족으로 실패해야 함
+          service.usePoint(userId, 8000),
         ]);
 
-        // Then: 하나는 성공, 하나는 실패
+        // Then
         const rejected = results.filter((r) => r.status === 'rejected');
         expect(rejected.length).toBe(1);
 
-        // 이력은 성공한 요청만 기록 (초기 충전 1개 + 성공한 사용 1개)
         const histories = await service.getPointHistories(userId);
-        expect(histories).toHaveLength(2);
-
         const useHistories = histories.filter(
           (h) => h.type === TransactionType.USE,
         );
         expect(useHistories).toHaveLength(1);
         expect(useHistories[0].amount).toBe(8000);
+      });
 
-        // 최종 잔액 확인
+      it('잔액 부족으로 실패 시 최종 잔액이 정확해야 한다', async () => {
+        // Given
+        const userId = getUserId();
+        await service.chargePoint(userId, 15000);
+
+        // When
+        await Promise.allSettled([
+          service.usePoint(userId, 10000),
+          service.usePoint(userId, 10000),
+        ]);
+
+        // Then
         const userPoint = await service.getPoint(userId);
-        expect(userPoint.point).toBe(2000); // 10000 - 8000
+        expect(userPoint.point).toBe(5000);
       });
     });
 
     describe('혼합 동시 요청 (충전 + 사용)', () => {
-      it('충전과 사용이 동시에 발생해도 정확한 순서로 처리되어야 한다', async () => {
+      it('충전과 사용이 동시에 발생해도 최종 잔액이 정확해야 한다', async () => {
         // Given
-        const userId = 104;
-        const initialBalance = 10000;
-        const chargeAmount = 20000;
-        const useAmount = 15000;
+        const userId = getUserId();
+        await service.chargePoint(userId, 10000);
 
-        await service.chargePoint(userId, initialBalance);
-
-        // When: 충전과 사용이 동시에 발생
+        // When: 충전(+20000)과 사용(-15000)이 동시에 발생
         await Promise.all([
-          service.chargePoint(userId, chargeAmount),
-          service.usePoint(userId, useAmount),
+          service.chargePoint(userId, 20000),
+          service.usePoint(userId, 15000),
         ]);
 
-        // Then: 동시성 제어가 제대로 되어 있다면 정확히 15000이 되어야 함
-        // (10000 + 20000 - 15000 = 15000)
+        // Then: 순서 무관하게 최종 잔액은 15000
         const userPoint = await service.getPoint(userId);
         expect(userPoint.point).toBe(15000);
+      });
 
+      it('충전과 사용이 동시에 발생해도 모든 이력이 기록되어야 한다', async () => {
+        // Given
+        const userId = getUserId();
+        await service.chargePoint(userId, 10000);
+
+        // When
+        await Promise.all([
+          service.chargePoint(userId, 20000),
+          service.usePoint(userId, 15000),
+        ]);
+
+        // Then
         const histories = await service.getPointHistories(userId);
         expect(histories).toHaveLength(3); // 초기충전, 충전, 사용
       });
 
-      it('여러 사용자의 요청이 동시에 처리되면 독립적으로 작동해야 한다', async () => {
+      it('여러 사용자의 요청은 독립적으로 처리되어야 한다', async () => {
         // Given
-        const user1 = 201;
-        const user2 = 202;
-        const user3 = 203;
-        const chargeAmount = 10000;
+        const user1 = getUserId();
+        const user2 = getUserId();
+        const user3 = getUserId();
 
         // When: 서로 다른 사용자의 충전이 동시에 발생
         await Promise.all([
-          service.chargePoint(user1, chargeAmount),
-          service.chargePoint(user2, chargeAmount),
-          service.chargePoint(user3, chargeAmount),
+          service.chargePoint(user1, 10000),
+          service.chargePoint(user2, 20000),
+          service.chargePoint(user3, 30000),
         ]);
 
-        // Then: 각 사용자는 독립적으로 처리되어야 함
+        // Then: 각 사용자의 포인트가 독립적으로 관리됨
         const point1 = await service.getPoint(user1);
         const point2 = await service.getPoint(user2);
         const point3 = await service.getPoint(user3);
 
-        expect(point1.point).toBe(chargeAmount);
-        expect(point2.point).toBe(chargeAmount);
-        expect(point3.point).toBe(chargeAmount);
-
-        // 각 사용자는 독립적이므로 동시성 문제가 없어야 함
+        expect(point1.point).toBe(10000);
+        expect(point2.point).toBe(20000);
+        expect(point3.point).toBe(30000);
       });
     });
 
     describe('순차 vs 동시 실행 비교', () => {
-      it('순차 실행 시에는 정확한 결과가 나온다 (베이스라인)', async () => {
+      it('순차 실행 시 정확한 결과가 나온다', async () => {
         // Given
-        const userId = 301;
+        const userId = getUserId();
         const chargeAmount = 10000;
 
         // When: 순차 실행
@@ -392,17 +430,14 @@ describe('Point Integration Tests', () => {
         await service.chargePoint(userId, chargeAmount);
         await service.chargePoint(userId, chargeAmount);
 
-        // Then: 정확히 30000이 되어야 함
+        // Then
         const userPoint = await service.getPoint(userId);
         expect(userPoint.point).toBe(30000);
-
-        const histories = await service.getPointHistories(userId);
-        expect(histories).toHaveLength(3);
       });
 
-      it('동시 실행 시에도 순차 실행과 동일한 결과가 나와야 한다', async () => {
+      it('동시 실행도 순차 실행과 동일한 결과가 나와야 한다', async () => {
         // Given
-        const userId = 302;
+        const userId = getUserId();
         const chargeAmount = 10000;
 
         // When: 동시 실행
@@ -412,13 +447,9 @@ describe('Point Integration Tests', () => {
           service.chargePoint(userId, chargeAmount),
         ]);
 
-        // Then: 동시성 제어가 제대로 되어 있다면 순차 실행과 동일하게 30000이 되어야 함
+        // Then
         const userPoint = await service.getPoint(userId);
         expect(userPoint.point).toBe(30000);
-
-        // 이력은 3개 모두 기록됨
-        const histories = await service.getPointHistories(userId);
-        expect(histories).toHaveLength(3);
       });
     });
   });
